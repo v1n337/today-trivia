@@ -1,6 +1,8 @@
 """ This Alexa skill provides events that happened on this day in the past """
 
+import random
 import requests
+import re
 from bs4 import BeautifulSoup
 
 
@@ -62,6 +64,20 @@ def on_intent(intent_request, session):
         raise ValueError("Invalid intent")
 
 
+def get_speech_output():
+    """ Condenses multiple events into a single speech output """
+
+    todays_events = list(get_todays_events())
+    random_event = todays_events[random.randrange(0, len(todays_events))]
+
+    speech_output = "Year " + random_event['year'] + "; " + random_event['event']
+
+    regex = re.compile(".*?\((.*?)\)")
+    re.findall(regex, speech_output)
+
+    return speech_output
+
+
 def get_whatsupintent_response(intent, session):
     """
     return list of news
@@ -69,7 +85,7 @@ def get_whatsupintent_response(intent, session):
     session_attributes = {}
     reprompt_text = None
 
-    speech_output = list(get_todays_events())[0]['event']
+    speech_output = get_speech_output()
     should_end_session = True
 
     # Setting reprompt_text to None signifies that we do not want to reprompt
@@ -174,7 +190,7 @@ def main():
     """
     main function
     """
-
+    print(get_speech_output())
 
 if __name__ == '__main__':
     main()
