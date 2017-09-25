@@ -1,8 +1,9 @@
 """ This Alexa skill provides events that happened on this day in the past """
 
 import random
+import datetime
+
 import requests
-import re
 from bs4 import BeautifulSoup
 
 
@@ -71,9 +72,6 @@ def get_speech_output():
     random_event = todays_events[random.randrange(0, len(todays_events))]
 
     speech_output = "Year " + random_event['year'] + "; " + random_event['event']
-
-    regex = re.compile(".*?\((.*?)\)")
-    re.findall(regex, speech_output)
 
     return speech_output
 
@@ -173,12 +171,14 @@ def parse_event(event_string):
 def get_todays_events():
     """ Get the current day's events """
 
-    url = "https://en.wikipedia.org/wiki/Main_Page"
+    today = datetime.datetime.now()
+    month = today.strftime('%B')
+    url = "https://en.wikipedia.org/wiki/" + month + "_" + str(today.day)
 
     response = requests.get(url, allow_redirects=True)
 
     document_soup = BeautifulSoup(response.content, 'lxml')
-    list_elements = document_soup.find(id="mp-otd").find("ul").findAll("li")
+    list_elements = document_soup.find(id="mw-content-text").findAll("ul")[1].findAll("li")
 
     list_elements = map(lambda x: BeautifulSoup(str(x), 'lxml').get_text(), list_elements)
     events = map(parse_event, list_elements)
