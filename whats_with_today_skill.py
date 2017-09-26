@@ -71,7 +71,9 @@ def get_speech_output():
     todays_events = list(get_todays_events())
     random_event = todays_events[random.randrange(0, len(todays_events))]
 
-    speech_output = "Year " + random_event['year'] + "; " + random_event['event']
+    speech_output = \
+        "On this day in the year " + random_event['year'] + \
+        ": " +  random_event['event']
 
     return speech_output
 
@@ -113,10 +115,10 @@ def get_welcome_response():
     session_attributes = {}
     card_title = "Welcome"
     speech_output = "Welcome to the Alexa Skills Kit sample. " \
-                    "Request news by saying what's up with today"
+                    "Request trivia by saying whats interesting about today"
     # If the user either does not reply to the welcome message or says something
     # that is not understood, they will be prompted again with this text.
-    reprompt_text = "Request news by saying what's up with today"
+    reprompt_text = "Request trivia by saying whats interesting about today"
     should_end_session = False
     return build_response(session_attributes, build_speechlet_response(
         card_title, speech_output, reprompt_text, should_end_session))
@@ -177,10 +179,10 @@ def get_todays_events():
 
     response = requests.get(url, allow_redirects=True)
 
-    document_soup = BeautifulSoup(response.content, 'lxml')
+    document_soup = BeautifulSoup(response.content, 'html.parser')
     list_elements = document_soup.find(id="mw-content-text").findAll("ul")[1].findAll("li")
 
-    list_elements = map(lambda x: BeautifulSoup(str(x), 'lxml').get_text(), list_elements)
+    list_elements = map(lambda x: BeautifulSoup(str(x), 'html.parser').get_text(), list_elements)
     events = map(parse_event, list_elements)
 
     return events
