@@ -4,10 +4,21 @@ on Twitter since a given date
 """
 
 import random
-import datetime
+import json
+import functools
+from datetime import date, timedelta
 
 import requests
 from bs4 import BeautifulSoup
+import twitter
+import preprocessor
+import isodate
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+SENTIMENT_TIER_1_UB = -0.6
+SENTIMENT_TIER_2_UB = -0.2
+SENTIMENT_TIER_3_UB = 0.2
+SENTIMENT_TIER_4_UB = 0.6
 
 
 def lambda_handler(event, context):
@@ -62,33 +73,90 @@ def on_intent(intent_request, session):
     intent_name = intent_request['intent']['name']
 
     # Dispatch to your skill's intent handlers
-    if intent_name == "WhatsUpIntent":
-        return get_whatsupintent_response(intent, session)
+    if intent_name == "HowsTheOrgIntent":
+        return get_howstheorgintent_response(intent, session)
     else:
         raise ValueError("Invalid intent")
 
 
-def get_speech_output():
+
+def get_tweets_about_org(orgname, date_from):
+    """ Get tweets from a given date about an organization """
+
+    api = twitter.Api(consumer_key='pnQFCZpsEfUxdmCOXiOYgEQDA',
+                      consumer_secret='lbnlPekP1lNIODvC4U8lwOnlO8r2MFPAr8VpnL2JYM4TL94MGE',
+                      access_token_key='218891284-vDatV2MOCc8j0MdVmHnZM40tZmfaymgUOZEKnYhC',
+                      access_token_secret='lWeGDsq9FUL8uGaYb4JkQ2kXllH2mx3jbtG4sdPS3059L')
+
+    tweets_objects = api.GetSearch(
+        term=orgname,
+        count=100,
+        result_type="recent",
+        lang="en",
+        since=date_from)
+
+    tweets = list(map(lambda x: x.text, tweets_objects))
+    cleaned_tweets = list(map(preprocessor.clean, tweets))
+    print(cleaned_tweets)
+
+    return cleaned_tweets
+
+def get_general_sentiment_from_tweets(tweets):
+    num_tweets = len(tweets)
+    analyzer = SentimentIntensityAnalyzer()
+
+    polarity_scores = list(map(analyzer.polarity_scores, tweets))
+    sentiment_scores = list(map(lambda x: x['compound'], polarity_scores))
+    aggregated_sentiment_score = functools.reduce(lambda x, y: x + y, sentiment_scores, 0) / num_tweets
+
+    print("aggregated_sentiment_score ", aggregated_sentiment_score)
+
+    return aggregated_sentiment_score
+
+
+def get_speech_output(orgname, date_from):
     """ Condenses multiple events into a single speech output """
 
-    todays_events = list(get_todays_events())
-    random_event = todays_events[random.randrange(0, len(todays_events))]
+    org_tweets = get_tweets_about_org(orgname, date_from)
+    sentiment_score = get_general_sentiment_from_tweets(org_tweets)
 
     speech_output = \
-        "On this day in the year " + random_event['year'] + \
-        ": " +  random_event['event']
+        "The general public sentiment for " + orgname
+
+    if sentiment_score > SENTIMENT_TIER_4_UB:
+        speech_output += " has been overwhelmingly positive"
+    elif sentiment_score > SENTIMENT_TIER_3_UB:
+        speech_output += " has been moderately positive"
+    elif sentiment_score > SENTIMENT_TIER_2_UB:
+        speech_output += " has been neutral"
+    elif sentiment_score > SENTIMENT_TIER_1_UB:
+        speech_output += " has been moderately negative"
+    else:
+        speech_output += " has been overwhelmingly negative"
 
     return speech_output
 
 
-def get_whatsupintent_response(intent, session):
+def get_howstheorgintent_response(intent, session):
     """
-    return list of news
+    return the general sentiment
     """
     session_attributes = {}
     reprompt_text = None
 
-    speech_output = get_speech_output()
+    orgname = intent['slots']['orgname']['value']
+    date_from_str = intent['slots']['datefrom']['value']
+
+    date_from = isodate.parse_date(date_from_str)
+    today_date = date.today()
+
+    while date_from > today_date:
+        date_from -= timedelta(days=365)
+
+    print(orgname)
+    print(date_from)
+
+    speech_output = get_speech_output(orgname, str(date_from))
     should_end_session = True
 
     # Setting reprompt_text to None signifies that we do not want to reprompt
@@ -117,11 +185,13 @@ def get_welcome_response():
 
     session_attributes = {}
     card_title = "Welcome"
-    speech_output = "Welcome to the Alexa Skills Kit sample. " \
-                    "Request trivia by saying whats interesting about today"
+    speech_output = "Welcome to the Alexa Skills for public organization sentiment \
+                    For instance, you can request the sentiment about Amazon since September 1st, 2017 \
+                    by saying hows amazon doing since September 1st, 2017?"
     # If the user either does not reply to the welcome message or says something
     # that is not understood, they will be prompted again with this text.
-    reprompt_text = "Request trivia by saying whats interesting about today"
+    reprompt_text = "You can request the sentiment about an organization, say Amazon, \
+                    since September 1st, 2017 by saying hows amazon doing since September 1st, 2017?"
     should_end_session = False
     return build_response(session_attributes, build_speechlet_response(
         card_title, speech_output, reprompt_text, should_end_session))
@@ -165,37 +235,11 @@ def build_response(session_attributes, speechlet_response):
     }
 
 
-def parse_event(event_string):
-    """ Parses the event string into a better format """
-    event_year, event = event_string.split(" – ", 1)
-    # print(event_year, event)
-
-    return {"year": event_year, "event": event}
-
-
-def get_todays_events():
-    """ Get the current day's events """
-
-    today = datetime.datetime.now()
-    month = today.strftime('%B')
-    url = "https://en.wikipedia.org/wiki/" + month + "_" + str(today.day)
-
-    response = requests.get(url, allow_redirects=True)
-
-    document_soup = BeautifulSoup(response.content, 'html.parser')
-    list_elements = document_soup.find(id="mw-content-text").findAll("ul")[1].findAll("li")
-
-    list_elements = map(lambda x: BeautifulSoup(str(x), 'html.parser').get_text(), list_elements)
-    events = map(parse_event, list_elements)
-
-    return events
-
-
 def main():
     """
     main function
     """
-    print(get_speech_output())
+    print(get_speech_output("twitter", "2017-09-01"))
 
 if __name__ == '__main__':
     main()

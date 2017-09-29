@@ -101,4 +101,5 @@ ENV/
 .mypy_cache/
 
 alexa-skill-env/
+.DS_Store
 
