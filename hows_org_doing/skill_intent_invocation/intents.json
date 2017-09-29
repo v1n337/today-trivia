@@ -1,0 +1,17 @@
+{
+  "intents": [
+    {
+      "intent": "HowsTheOrgIntent",
+      "slots": [
+        {
+          "name": "date",
+          "type": "AMAZON.DATE"
+        },
+        {
+          "name": "orgname",
+          "type": "AMAZON.Organization"
+        }
+      ]
+    }
+  ]
+}

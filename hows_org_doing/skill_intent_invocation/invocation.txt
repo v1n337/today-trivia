@@ -1,0 +1,1 @@
+HowsTheOrgIntent hows {orgname} doing since {date}?
