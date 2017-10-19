@@ -68,14 +68,14 @@ def on_intent(intent_request, session):
 def get_speech_output():
     """ Condenses multiple events into a single speech output """
 
-    todays_events = list(get_todays_events())
+    todays_events, source_url = get_todays_events_and_url()
     random_event = todays_events[random.randrange(0, len(todays_events))]
 
     speech_output = \
         "On this day in the year " + random_event['year'] + \
         ": " +  random_event['event']
 
-    return speech_output
+    return speech_output, source_url
 
 
 def get_whatsupintent_response(intent, session):
@@ -85,14 +85,14 @@ def get_whatsupintent_response(intent, session):
     session_attributes = {}
     reprompt_text = None
 
-    speech_output = get_speech_output()
+    speech_output, source_url = get_speech_output()
     should_end_session = True
 
     # Setting reprompt_text to None signifies that we do not want to reprompt
     # the user. If the user does not respond or says something that is not
     # understood, the session will end.
     return build_response(session_attributes, build_speechlet_response(
-        intent['name'], speech_output, reprompt_text, should_end_session))
+        intent['name'], speech_output, source_url, reprompt_text, should_end_session))
 
 
 def on_session_ended(session_ended_request, session):
@@ -127,7 +127,7 @@ def get_welcome_response():
 # --------------- Helpers that build all of the responses ----------------------
 
 
-def build_speechlet_response(title, output, reprompt_text, should_end_session):
+def build_speechlet_response(title, output, source_url, reprompt_text, should_end_session):
     '''
     @return: speechlet dict
     '''
@@ -138,8 +138,8 @@ def build_speechlet_response(title, output, reprompt_text, should_end_session):
         },
         'card': {
             'type': 'Simple',
-            'title': 'SessionSpeechlet - ' + title,
-            'content': 'SessionSpeechlet - ' + output
+            'title': title,
+            'content': output + "\n\nSource: " + source_url
         },
         'reprompt': {
             'outputSpeech': {
@@ -170,7 +170,7 @@ def parse_event(event_string):
     return {"year": event_year, "event": event}
 
 
-def get_todays_events():
+def get_todays_events_and_url():
     """ Get the current day's events """
 
     today = datetime.datetime.now()
@@ -183,9 +183,9 @@ def get_todays_events():
     list_elements = document_soup.find(id="mw-content-text").findAll("ul")[1].findAll("li")
 
     list_elements = map(lambda x: BeautifulSoup(str(x), 'html.parser').get_text(), list_elements)
-    events = map(parse_event, list_elements)
+    events = list(map(parse_event, list_elements))
 
-    return events
+    return events, url
 
 
 def main():
